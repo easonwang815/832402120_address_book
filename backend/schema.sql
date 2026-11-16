@@ -1,0 +1,12 @@
+CREATE TABLE IF NOT EXISTS contacts (
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    favorite INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS contact_methods (
+    id INTEGER PRIMARY KEY,
+    contact_id INTEGER NOT NULL REFERENCES contacts(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,
+    value TEXT NOT NULL
+);
