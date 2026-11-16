@@ -438,3 +438,77 @@ body.dark .quick-actions { background: linear-gradient(155deg, rgba(125,157,189,
   .detail-card:first-child .method-type { flex-basis: 62px; font-size: 13px; }
   .detail-card:first-child .method-value { font-size: 16px; }
 }
+
+/* Batch selection, duplicate review, and birthday views */
+.batch-controls { padding: 0 8px 10px; }
+.batch-controls .secondary, .batch-controls .primary { min-height: 34px; font-size: 12px; }
+#batch-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding-top: 10px; color: var(--secondary); font-size: 12px; }
+#batch-actions label { display: flex; align-items: center; gap: 5px; }
+#batch-actions select { max-width: 100%; flex: 1; }
+.batch-check { flex: none; width: 16px; height: 16px; accent-color: #007aff; }
+.duplicate-pair { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 0; border-bottom: 1px solid var(--line); }
+.duplicate-pair .muted { margin-top: 5px; font-size: 12px; }
+#duplicate-list { margin-top: 24px; }
+#merge-options { display: grid; gap: 8px; margin: 20px 0; }
+.merge-choice { display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--control); }
+.merge-choice span { min-width: 0; overflow-wrap: anywhere; }
+#merge-birthday label { display: flex; align-items: center; gap: 12px; }
+#merge-error { color: var(--error); }
+button:disabled { opacity: .55; cursor: wait; }
+
+.emoji-options { display: flex; flex-wrap: wrap; gap: 6px; }
+.avatar-picker { margin: 0; padding: 0; border: 0; }
+.avatar-picker legend { font-size: 12px; font-weight: 600; }
+.avatar-help { margin: 5px 0 8px; color: var(--secondary); font-size: 12px; }
+.emoji-choice { display: grid; place-items: center; width: 38px; height: 38px; border: 1px solid var(--line); border-radius: 10px; background: var(--control); font-size: 20px; }
+.emoji-choice.selected { border-color: var(--accent); box-shadow: 0 0 0 2px var(--selected); }
+.emoji-avatar { font-family: 'Apple Color Emoji', 'Segoe UI Emoji', sans-serif; }
+.birthday-badge { flex: none; padding: 4px 7px; border-radius: 8px; background: #fff2d7; color: #885b08; font-size: 11px; font-weight: 600; white-space: nowrap; }
+body.dark .birthday-badge { background: #514123; color: #ffdf95; }
+
+/* Stable matching colors for each tag and contact avatar. */
+.tag-tone-0 { --tag-color: #517aad; --tag-bg: #e5effa; }
+.tag-tone-1 { --tag-color: #50836b; --tag-bg: #e3f1e8; }
+.tag-tone-2 { --tag-color: #a4655d; --tag-bg: #f7e9e6; }
+.tag-tone-3 { --tag-color: #8a702f; --tag-bg: #f6efd9; }
+.tag-tone-4 { --tag-color: #796398; --tag-bg: #eee9f7; }
+.group-dot[class*="tag-tone-"] { background: var(--tag-color); }
+.chip[class*="tag-tone-"] { color: var(--tag-color); background: var(--tag-bg); }
+body.dark .chip[class*="tag-tone-"] { color: #f5f5f7; background: color-mix(in srgb, var(--tag-color) 55%, #252e3b); }
+.avatar.avatar-tone-0:not(img), body.dark .avatar.avatar-tone-0:not(img) { background: linear-gradient(145deg, #b1d2ee, #729bc1); color: #fff; }
+.avatar.avatar-tone-1:not(img), body.dark .avatar.avatar-tone-1:not(img) { background: linear-gradient(145deg, #a9ccb8, #719c83); color: #fff; }
+.avatar.avatar-tone-2:not(img), body.dark .avatar.avatar-tone-2:not(img) { background: linear-gradient(145deg, #dcbab5, #b98e8a); color: #fff; }
+.avatar.avatar-tone-3:not(img), body.dark .avatar.avatar-tone-3:not(img) { background: linear-gradient(145deg, #c9bfdf, #9b8fb5); color: #fff; }
+.avatar.avatar-tone-4:not(img), body.dark .avatar.avatar-tone-4:not(img) { background: linear-gradient(145deg, #d6c8a9, #b39d78); color: #fff; }
+
+/* Compact editor keeps common fields visible at typical desktop heights. */
+#editor { width: min(760px, calc(100% - 32px)); padding: 18px 22px; max-height: calc(100dvh - 32px); }
+#editor .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; margin-top: 10px; }
+#editor .wide { grid-column: 1 / -1; }
+#editor .form-grid input:not([type=checkbox]), #editor textarea { margin-top: 4px; padding: 7px 9px; }
+#editor textarea { min-height: 48px; height: 48px; resize: vertical; }
+#editor .dialog-actions { margin-top: 8px; }
+#editor #form-error:empty { display: none; }
+#editor .avatar-picker { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+#editor .avatar-picker legend { float: left; margin-right: 10px; }
+#editor .avatar-help { display: none; }
+#editor .emoji-options { gap: 4px; }
+#editor .emoji-choice { width: 30px; height: 30px; font-size: 17px; }
+#editor #clear-avatar { min-height: 30px; font-size: 12px; }
+#editor .checkbox { min-height: 26px; }
+#editor .text-button { min-height: 30px; }
+#editor .method-edit { margin-top: 4px; }
+#editor .tag-picker { border: 0; margin: 0; padding: 0; min-width: 0; }
+#editor .tag-picker legend { font-size: 12px; font-weight: 600; margin-bottom: 6px; }
+.editor-tags { display: flex; flex-wrap: wrap; gap: 6px; max-height: 76px; overflow-y: auto; }
+.editor-tag { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--line); border-radius: 8px; padding: 4px 8px; }
+.editor-tag input { margin: 0; accent-color: #007aff; }
+.editor-tag span { color: var(--tag-color); }
+.new-tag-row { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+#editor .new-tag-row input { margin: 0; flex: 1; }
+.new-tag-row .secondary { min-height: 34px; white-space: nowrap; }
+@media (max-width: 680px) {
+  #editor .form-grid { grid-template-columns: 1fr 1fr; }
+  #editor .avatar-picker, #editor .wide { grid-column: 1 / -1; }
+  #editor { padding: 16px; }
+}

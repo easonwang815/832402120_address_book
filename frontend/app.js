@@ -1,9 +1,10 @@
 const $ = (selector) => document.querySelector(selector);
-const state = { contacts: [], groups: [], selected: null, view: 'all', group: null, avatar: '' };
+const state = { contacts: [], groups: [], selected: null, view: 'all', group: null, avatar: '', batch: false, checked: new Set(), visible: [], duplicatePairs: [] };
 const dialog = $('#editor');
 const form = $('#contact-form');
 
 const iconPaths = {
+  calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/>',
   user: '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
   users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2m20 0v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/>',
   star: '<path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2-5.6-3-5.6 3 1.1-6.2L3 9.6l6.2-.9Z"/>',
@@ -41,7 +42,7 @@ async function api(url, options = {}) {
   const response = await fetch(url, options);
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(errorLabels[data.error] || 'Something went wrong. Please try again.');
+    throw new Error(errorLabels[data.error] || data.error || 'Something went wrong. Please try again.');
   }
   return response.status === 204 ? null : response.json();
 }
@@ -54,14 +55,46 @@ function notify(text) {
 }
 function avatar(person, large = false) {
   const cls = `${large ? 'avatar hero-avatar' : 'avatar'} avatar-tone-${person.id % 5}`;
+  if (person.avatar?.startsWith('emoji:')) return `<span class="${cls} emoji-avatar">${esc(person.avatar.slice(6))}</span>`;
   return person.avatar && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(person.avatar)
     ? `<img class="${cls}" src="${esc(person.avatar)}" alt="">`
     : `<span class="${cls}">${esc(person.name.trim().charAt(0).toUpperCase())}</span>`;
 }
-function recent(person) {
-  const time = new Date(person.created_at.replace(' ', 'T') + 'Z').getTime();
-  return Date.now() - time < 7 * 86400000;
+function tagTone(tag) {
+  let hash = 0;
+  for (const char of tag.toLocaleLowerCase()) hash = (hash * 31 + char.codePointAt(0)) >>> 0;
+  return hash % 5;
 }
+function recent(person) {
+  const age = Date.now() - createdTime(person);
+  return age >= 0 && age < 7 * 86400000;
+}
+function createdTime(person) {
+  const value = person.created_at.replace(' ', 'T');
+  return new Date(/(?:Z|[+-]\d\d:\d\d)$/.test(value) ? value : value + 'Z').getTime();
+}
+function addedDate(person) {
+  const time = createdTime(person);
+  return Number.isNaN(time) ? person.created_at : new Intl.DateTimeFormat('en', {
+    year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+  }).format(new Date(time));
+}
+function nextBirthday(birthday) {
+  if (!birthday) return null;
+  const parts = birthday.split('-').map(Number);
+  if (parts.length !== 3 || parts.some(Number.isNaN)) return null;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  function occurrence(year) {
+    const month = parts[1] - 1;
+    const day = parts[1] === 2 && parts[2] === 29 && new Date(year, 1, 29).getMonth() !== 1 ? 28 : parts[2];
+    return new Date(year, month, day);
+  }
+  let next = occurrence(today.getFullYear());
+  if (next < today) next = occurrence(today.getFullYear() + 1);
+  return Math.round((Date.UTC(next.getFullYear(), next.getMonth(), next.getDate()) - Date.UTC(today.getFullYear(), today.getMonth(), today.getDate())) / 86400000);
+}
+
 function syncMenu(select, menu) {
   const value = menu.querySelector('.menu-value');
   value.textContent = select.selectedOptions[0]?.textContent || '';
@@ -106,6 +139,7 @@ function render() {
   $('#total').textContent = $('#stat-total').textContent = all.length;
   $('#favorites-count').textContent = $('#stat-favorites').textContent = favorites;
   $('#recent-count').textContent = $('#stat-recent').textContent = recentCount;
+  $('#birthdays-count').textContent = all.filter((p) => p.birthday).length;
   document.querySelectorAll('#navigation .nav').forEach((button) => button.classList.toggle('active', button.dataset.view === state.view));
   const filter = $('#tag-filter');
   const previous = filter.value;
@@ -115,26 +149,39 @@ function render() {
   syncMenu($('#sort'), $('#sort-menu'));
   syncMenu(filter, $('#tag-menu'));
   $('#stat-tags').textContent = tags.length;
-  $('#tags').innerHTML = tags.map((tag, index) => `<button class="nav tag-nav ${filter.value === tag ? 'active' : ''}" data-tag-index="${index}"><span class="group-dot group-tone-${index % 5}" aria-hidden="true"></span><span class="group-name">${esc(tag)}</span><b>${all.filter((person) => person.tags.includes(tag)).length}</b></button>`).join('');
+  $('#tags').innerHTML = tags.map((tag, index) => `<button class="nav tag-nav ${filter.value === tag ? 'active' : ''}" data-tag-index="${index}"><span class="group-dot tag-tone-${tagTone(tag)}" aria-hidden="true"></span><span class="group-name">${esc(tag)}</span><b>${all.filter((person) => person.tags.includes(tag)).length}</b></button>`).join('');
   if (!tags.length) $('#tags').innerHTML = '<p class="tag-empty">Add tags when editing a contact</p>';
   let list = all.filter((p) => {
     if (state.view === 'favorites' && !p.favorite) return false;
     if (state.view === 'recent' && !recent(p)) return false;
+    if (state.view === 'birthdays' && !p.birthday) return false;
     if (state.view === 'group' && !p.groups.some((g) => g.id === state.group)) return false;
     if (filter.value && !p.tags.includes(filter.value)) return false;
     const query = $('#search').value.trim().toLowerCase();
     return !query || [p.name, ...p.methods.filter((m) => ['电话', '邮箱'].includes(m.type)).map((m) => m.value)].some((v) => v.toLowerCase().includes(query));
   });
   const sort = $('#sort').value;
-  list.sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, 'zh') : sort === 'recent' ? b.id - a.id : a.id - b.id);
-  $('#list-title').textContent = filter.value || ({all:'All Contacts',favorites:'Favorites',recent:'Recently Added',overview:'All Contacts'}[state.view]);
+  list.sort((a, b) => {
+    if (state.view === 'birthdays') return nextBirthday(a.birthday) - nextBirthday(b.birthday);
+    if (state.view === 'recent' || sort === 'recent') return createdTime(b) - createdTime(a) || b.id - a.id;
+    if (sort === 'oldest') return createdTime(a) - createdTime(b) || a.id - b.id;
+    return a.name.localeCompare(b.name, 'zh');
+  });
+  $('#sort-menu').hidden = state.view === 'birthdays' || state.view === 'recent';
+  state.visible = list.map((p) => p.id);
+  $('#batch-actions').hidden = !state.batch;
+  $('#batch-toggle').textContent = state.batch ? 'Done' : 'Select';
+  $('#selected-count').textContent = `${state.checked.size} selected`;
+  $('#select-all').checked = list.length > 0 && list.every((p) => state.checked.has(p.id));
+  $('#select-all').indeterminate = list.some((p) => state.checked.has(p.id)) && !$('#select-all').checked;
+  $('#list-title').textContent = filter.value || ({all:'All Contacts',favorites:'Favorites',recent:'Recently Added',overview:'All Contacts',birthdays:'Birthdays',duplicates:'All Contacts'}[state.view]);
   $('#list-heading').textContent = `${list.length} ${list.length === 1 ? 'contact' : 'contacts'}`;
   const isOverview = state.view === 'overview';
   $('#overview-page').hidden = !isOverview;
   $('#detail').hidden = isOverview;
-  $('#overview-recent').innerHTML = all.filter(recent).sort((a, b) => b.id - a.id).slice(0, 5).map((person) => `<button type="button" class="overview-contact" data-contact="${person.id}">${avatar(person)}<span>${esc(person.name)}</span><span class="overview-date">${esc(person.created_at.slice(0, 10))}</span></button>`).join('') || '<p class="muted">No recently added contacts.</p>';
+  $('#overview-recent').innerHTML = all.filter(recent).sort((a, b) => createdTime(b) - createdTime(a) || b.id - a.id).slice(0, 5).map((person) => `<button type="button" class="overview-contact" data-contact="${person.id}">${avatar(person)}<span>${esc(person.name)}</span><span class="overview-date">${esc(addedDate(person))}</span></button>`).join('') || '<p class="muted">No recently added contacts.</p>';
   if (!list.some((p) => p.id === state.selected)) state.selected = list[0]?.id ?? null;
-  $('#contact-list').innerHTML = list.length ? list.map((p) => `<div class="contact-row ${p.id === state.selected ? 'selected' : ''}" data-id="${p.id}" tabindex="0" role="button">${avatar(p)}<span class="contact-label"><span class="contact-name">${esc(p.name)}</span>${p.methods[0] ? `<span class="contact-preview">${esc(p.methods[0].value)}</span>` : ''}</span><button class="star" aria-pressed="${p.favorite}" data-favorite="${p.id}" aria-label="${p.favorite ? 'Remove from favorites' : 'Add to favorites'}">${icon('star')}</button></div>`).join('') : '<p class="muted">No contacts found</p>';
+  $('#contact-list').innerHTML = list.length ? list.map((p) => `<div class="contact-row ${p.id === state.selected ? 'selected' : ''}" data-id="${p.id}" tabindex="0" role="button">${state.batch ? `<input type="checkbox" class="batch-check" data-check="${p.id}" aria-label="Select ${esc(p.name)}" ${state.checked.has(p.id) ? 'checked' : ''}>` : ''}${avatar(p)}<span class="contact-label"><span class="contact-name">${esc(p.name)}</span>${state.view === 'birthdays' ? `<span class="contact-preview">🎂 ${esc(p.birthday)} · ${nextBirthday(p.birthday) === 0 ? 'Today' : `in ${nextBirthday(p.birthday)} days`}${nextBirthday(p.birthday) <= 30 ? ' · Coming soon' : ''}</span>` : state.view === 'recent' ? `<span class="contact-preview">Added ${esc(addedDate(p))}</span>` : p.methods[0] ? `<span class="contact-preview">${esc(p.methods[0].value)}</span>` : ''}</span>${state.view === 'birthdays' && nextBirthday(p.birthday) <= 30 ? '<span class="birthday-badge">🎂 Soon</span>' : ''}<button class="star" aria-pressed="${p.favorite}" data-favorite="${p.id}" aria-label="${p.favorite ? 'Remove from favorites' : 'Add to favorites'}">${icon('star')}</button></div>`).join('') : '<p class="muted">No contacts found</p>';
   renderDetail();
 }
 function renderDetail() {
@@ -159,7 +206,7 @@ function renderDetail() {
   const quickAction = (label, glyph, url) => url
     ? `<a class="quick-action" href="${esc(url)}">${icon(glyph)}<span>${label}</span></a>`
     : `<span class="quick-action unavailable" aria-disabled="true">${icon(glyph)}<span>${label}</span></span>`;
-  const tagChips = person.tags.map((tag) => `<span class="chip">${esc(tag)}</span>`);
+  const tagChips = person.tags.map((tag) => `<span class="chip tag-tone-${tagTone(tag)}">${esc(tag)}</span>`);
   $('#detail').innerHTML = `
     <div class="detail-hero">
       <div class="identity">
@@ -193,6 +240,7 @@ function renderDetail() {
         <h3>${icon('tag')}Tags</h3>
         <div class="chips">${tagChips.join('') || '<span class="muted">No tags yet</span>'}</div>
       </section>
+      <section class="detail-card"><h3><span aria-hidden="true">🎂</span> Birthday</h3><div>${person.birthday ? `${esc(person.birthday)} · ${nextBirthday(person.birthday) === 0 ? 'Today' : `in ${nextBirthday(person.birthday)} days`}` : '<span class="muted">No birthday added</span>'}</div></section>
       <section class="detail-card">
         <h3>${icon('note')}Notes</h3>
         <div class="contact-notes">${person.notes ? esc(person.notes) : '<span class="muted">No notes yet</span>'}</div>
@@ -206,15 +254,54 @@ function editMethod(method = {type:'电话', value:''}) {
   row.querySelector('button').onclick = () => row.remove();
   $('#method-list').append(row);
 }
+let editorTags = new Set();
+let extraTags = [];
+function renderEditorTags() {
+  const tags = [...new Set([...state.contacts.flatMap((person) => person.tags), ...editorTags, ...extraTags])]
+    .sort((a, b) => a.localeCompare(b, 'en'));
+  $('#editor-tags').innerHTML = tags.length ? tags.map((tag, index) =>
+    `<label class="editor-tag"><input type="checkbox" data-editor-tag="${index}" ${editorTags.has(tag) ? 'checked' : ''}><span class="tag-tone-${tagTone(tag)}">${esc(tag)}</span></label>`
+  ).join('') : '<span class="muted">No tags yet</span>';
+  $('#editor-tags').tagNames = tags;
+}
+$('#editor-tags').onchange = (event) => {
+  const checkbox = event.target.closest('[data-editor-tag]');
+  if (!checkbox) return;
+  const tag = $('#editor-tags').tagNames[Number(checkbox.dataset.editorTag)];
+  if (checkbox.checked) editorTags.add(tag); else editorTags.delete(tag);
+};
+$('#create-tag').onclick = () => {
+  const input = $('#new-tag');
+  const value = input.value.trim();
+  if (!value) { input.focus(); return; }
+  const existing = [...state.contacts.flatMap((person) => person.tags), ...editorTags, ...extraTags]
+    .find((tag) => tag.toLocaleLowerCase() === value.toLocaleLowerCase());
+  const tag = existing || value;
+  if (!existing) extraTags.push(tag);
+  editorTags.add(tag);
+  input.value = '';
+  renderEditorTags();
+  input.focus();
+};
+$('#new-tag').onkeydown = (event) => {
+  if (event.key === 'Enter') { event.preventDefault(); $('#create-tag').click(); }
+};
+
 function openEditor(person = null) {
   form.reset();
   form.dataset.id = person?.id ?? '';
   state.avatar = person?.avatar ?? '';
   form.elements.name.value = person?.name ?? '';
   form.elements.notes.value = person?.notes ?? '';
-  form.elements.tags.value = person?.tags.join(', ') ?? '';
+  form.elements.birthday.value = person?.birthday ?? '';
+  form.elements.birthday.max = new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  editorTags = new Set(person?.tags ?? []);
+  extraTags = [];
+  $('#new-tag').value = '';
+  renderEditorTags();
   form.elements.favorite.checked = person?.favorite ?? false;
   $('#form-title').textContent = person ? 'Edit contact' : 'Add Contact';
+  renderEmojiOptions();
   $('#form-error').textContent = '';
   $('#method-list').replaceChildren();
   (person?.methods ?? []).forEach(editMethod);
@@ -224,6 +311,18 @@ function openEditor(person = null) {
 $('#new-contact').onclick = () => openEditor();
 $('#add-method').onclick = () => editMethod();
 $('#cancel').onclick = $('#close-editor').onclick = () => dialog.close();
+const emojiChoices = ['😀', '😊', '😎', '🥳', '🐱', '🐶', '🦊', '🐼', '🌻', '🌙', '⭐', '🎨'];
+function renderEmojiOptions() {
+  $('#emoji-options').innerHTML = emojiChoices.map((emoji) => `<button type="button" class="emoji-choice ${state.avatar === 'emoji:' + emoji ? 'selected' : ''}" data-emoji="${emoji}" aria-label="Use ${emoji} as avatar" aria-pressed="${state.avatar === 'emoji:' + emoji}">${emoji}</button>`).join('');
+}
+$('#emoji-options').onclick = (event) => {
+  const button = event.target.closest('[data-emoji]');
+  if (!button) return;
+  state.avatar = 'emoji:' + button.dataset.emoji;
+  $('#avatar-file').value = '';
+  renderEmojiOptions();
+};
+$('#clear-avatar').onclick = () => { state.avatar = ''; $('#avatar-file').value = ''; renderEmojiOptions(); };
 $('#avatar-file').onchange = (event) => {
   const file = event.target.files[0];
   if (!file) return;
@@ -233,14 +332,28 @@ $('#avatar-file').onchange = (event) => {
     return;
   }
   const reader = new FileReader();
-  reader.onload = () => { state.avatar = reader.result; $('#form-error').textContent = ''; };
+  reader.onload = () => { state.avatar = reader.result; renderEmojiOptions(); $('#form-error').textContent = ''; };
   reader.readAsDataURL(file);
 };
 form.onsubmit = async (event) => {
   event.preventDefault();
   const methods = [...document.querySelectorAll('.method-edit')].map((row) => ({type:row.querySelector('select').value, value:row.querySelector('input').value.trim()})).filter((m) => m.value);
-  const data = { name:form.elements.name.value, notes:form.elements.notes.value, favorite:form.elements.favorite.checked, avatar:state.avatar, methods, groups:state.contacts.find((person) => person.id === Number(form.dataset.id))?.groups.map((group) => group.id) ?? [], tags:form.elements.tags.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean) };
+  const data = { birthday:form.elements.birthday.value, name:form.elements.name.value, notes:form.elements.notes.value, favorite:form.elements.favorite.checked, avatar:state.avatar, methods, groups:state.contacts.find((person) => person.id === Number(form.dataset.id))?.groups.map((group) => group.id) ?? [], tags:[...editorTags] };
+  const saveButton = form.querySelector('[type=submit]');
+  saveButton.disabled = true;
   try {
+    let match = null;
+    if (!form.dataset.id) {
+      const contacts = await api('/api/contacts');
+      const normalize = (method) => method.type === '电话' ? method.value.replace(/[^0-9+]/g, '') : method.value.trim().toLowerCase();
+      match = contacts.find((contact) => contact.name.trim().toLowerCase() === data.name.trim().toLowerCase() || data.methods.some((method) => {
+        if (!['电话', '邮箱'].includes(method.type)) return false;
+        const value = normalize(method);
+        if (!value || (method.type === '电话' && value.replace(/\D/g, '').length < 7)) return false;
+        return contact.methods.some((existing) => existing.type === method.type && normalize(existing) === value);
+      }));
+    }
+    const shouldMerge = match && confirm(`A contact named ${match.name} matches this name, phone number or email. Save this contact and review a merge?`);
     const saved = await api(form.dataset.id ? `/api/contacts/${form.dataset.id}` : '/api/contacts', {method:form.dataset.id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     state.selected = saved.id;
     if (!form.dataset.id) {
@@ -251,7 +364,9 @@ form.onsubmit = async (event) => {
     dialog.close();
     await refresh();
     notify('Contact saved');
+    if (shouldMerge) openMerge({contacts: [match, saved]});
   } catch (error) { $('#form-error').textContent = error.message; }
+  finally { saveButton.disabled = false; }
 };
 $('#overview-recent').onclick = (event) => {
   const button = event.target.closest('[data-contact]');
@@ -262,7 +377,13 @@ $('#overview-recent').onclick = (event) => {
   $('#tag-filter').value = '';
   render();
 };
-$('#navigation').onclick = (event) => { const button = event.target.closest('[data-view]'); if (button) { state.view = button.dataset.view; $('#tag-filter').value = ''; render(); } };
+$('#navigation').onclick = async (event) => {
+  const button = event.target.closest('[data-view]');
+  if (!button) return;
+  state.view = button.dataset.view;
+  $('#tag-filter').value = '';
+  render();
+};
 $('#tags').onclick = (event) => {
   const button = event.target.closest('[data-tag-index]');
   if (!button) return;
@@ -274,6 +395,7 @@ $('#tags').onclick = (event) => {
   render();
 };
 $('#contact-list').onclick = async (event) => {
+  if (event.target.matches('[data-check]')) return;
   const favorite = event.target.closest('[data-favorite]');
   if (favorite) {
     const person = state.contacts.find((p) => p.id === Number(favorite.dataset.favorite));
@@ -289,6 +411,12 @@ $('#contact-list').onclick = async (event) => {
     return;
   }
   const row = event.target.closest('[data-id]');
+  if (row && state.batch) {
+    const id = Number(row.dataset.id);
+    if (state.checked.has(id)) state.checked.delete(id); else state.checked.add(id);
+    render();
+    return;
+  }
   if (row) {
     const previous = state.selected;
     const wasOverview = state.view === 'overview';
@@ -335,3 +463,65 @@ function setTheme(dark) { document.body.classList.toggle('dark', dark); $('#them
 setTheme(localStorage.getItem('theme') === 'dark');
 $('#theme').onclick = () => setTheme(!document.body.classList.contains('dark'));
 refresh().catch((error) => notify(error.message));
+
+$('#contact-list').addEventListener('change', (event) => {
+  if (!event.target.matches('[data-check]')) return;
+  const id = Number(event.target.dataset.check);
+  if (event.target.checked) state.checked.add(id); else state.checked.delete(id);
+  render();
+});
+$('#batch-toggle').onclick = () => { state.batch = !state.batch; state.checked.clear(); render(); };
+$('#select-all').onchange = (event) => {
+  for (const id of state.visible) {
+    if (event.target.checked) state.checked.add(id); else state.checked.delete(id);
+  }
+  render();
+};
+$('#batch-apply').onclick = async () => {
+  const ids = [...state.checked];
+  if (!ids.length) { notify('Select at least one contact'); return; }
+  const action = $('#batch-action').value;
+  let tag = '';
+  if (action === 'delete' && !confirm(`Delete ${ids.length} selected contacts? This cannot be undone.`)) return;
+  if (action === 'add_tag' || action === 'remove_tag') {
+    const entered = prompt(action === 'add_tag' ? 'Tag to add' : 'Tag to remove');
+    if (entered === null) return;
+    tag = entered.trim();
+    if (!tag) { notify('Enter a tag'); return; }
+  }
+  const button = $('#batch-apply');
+  button.disabled = true;
+  try {
+    await api('/api/contacts/batch', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids, action, tag})});
+    state.checked.clear();
+    await refresh();
+    notify(`Updated ${ids.length} contacts`);
+  } catch (error) { notify(error.message); }
+  finally { button.disabled = false; }
+};
+let mergePair = null;
+function openMerge(pair) {
+  mergePair = pair;
+  $('#merge-options').innerHTML = pair.contacts.map((person, index) => `<label class="merge-choice"><input type="radio" name="target" value="${person.id}" ${index === 0 ? 'checked' : ''}> ${avatar(person)} <span><strong>${esc(person.name)}</strong><br><small>${person.methods.map((m) => esc(m.value)).join(' · ') || 'No contact information'}${person.birthday ? ' · ' + esc(person.birthday) : ''}</small></span></label>`).join('');
+  const birthdays = [...new Set(pair.contacts.map((p) => p.birthday).filter(Boolean))];
+  $('#merge-birthday').innerHTML = birthdays.length > 1 ? `<label>Birthday to keep <select name="birthday" required><option value="">Choose a birthday</option>${birthdays.map((day) => `<option value="${esc(day)}">${esc(day)}</option>`).join('')}</select></label>` : '';
+  $('#merge-error').textContent = '';
+  $('#merge-dialog').showModal();
+}
+$('#merge-close').onclick = $('#merge-cancel').onclick = () => $('#merge-dialog').close();
+$('#merge-form').onsubmit = async (event) => {
+  event.preventDefault();
+  const target = Number(new FormData(event.currentTarget).get('target'));
+  const birthday = new FormData(event.currentTarget).get('birthday');
+  const button = event.currentTarget.querySelector('[type=submit]');
+  button.disabled = true;
+  try {
+    const result = await api('/api/contacts/merge', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ids:mergePair.contacts.map((p) => p.id), target_id:target, birthday})});
+    $('#merge-dialog').close();
+    state.checked.clear();
+    state.selected = result.id;
+    await refresh();
+    notify('Contacts merged');
+  } catch (error) { $('#merge-error').textContent = error.message; }
+  finally { button.disabled = false; }
+};
