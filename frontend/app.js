@@ -139,6 +139,7 @@ function render() {
 }
 function renderDetail() {
   const person = state.contacts.find((p) => p.id === state.selected);
+  $('#detail').dataset.tone = person ? String(person.id % 5) : '';
   if (!person) {
     $('#detail').innerHTML = '<div class="empty-state"><div><strong>No contact selected</strong>Adjust your filters or add a contact.</div></div>';
     return;
@@ -149,7 +150,7 @@ function renderDetail() {
   const methods = sortedMethods.length ? sortedMethods.map((method) => {
     const phone = method.type === '电话' && /^[+\d\s().-]+$/.test(method.value) ? method.value.replace(/[\s().-]/g, '') : '';
     const email = method.type === '邮箱' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(method.value) ? method.value : '';
-    const action = phone ? `<a class="method-action" href="tel:${esc(phone)}">Call</a>` : email ? `<a class="method-action" href="mailto:${esc(email)}">Email</a>` : '';
+    const action = phone ? `<a class="method-action" href="tel:${esc(phone)}">${icon('phone')}<span>Call</span></a>` : email ? `<a class="method-action" href="mailto:${esc(email)}">${icon('mail')}<span>Email</span></a>` : '';
     return `<div class="method"><span class="method-type">${esc(methodLabels[method.type] || method.type)}</span><span class="method-value">${esc(method.value)}</span>${action}<button class="copy" data-copy="${method.index}" aria-label="Copy ${esc(methodLabels[method.type] || method.type)}" title="Copy">${icon('copy')}</button></div>`;
   }).join('') : '<span class="muted">No contact information</span>';
   const validPhone = person.methods.find((method) => method.type === '电话' && /^[+\d\s().-]+$/.test(method.value));
@@ -276,15 +277,31 @@ $('#contact-list').onclick = async (event) => {
   const favorite = event.target.closest('[data-favorite]');
   if (favorite) {
     const person = state.contacts.find((p) => p.id === Number(favorite.dataset.favorite));
-    try { await api(`/api/contacts/${person.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...person, favorite:!person.favorite, groups:person.groups.map((g) => g.id)})}); await refresh(); } catch (error) { notify(error.message); }
+    try {
+      await api(`/api/contacts/${person.id}`, {method:'PUT', headers:{'Content-Type':'application/json'}, body:JSON.stringify({...person, favorite:!person.favorite, groups:person.groups.map((g) => g.id)})});
+      await refresh();
+      const updated = document.querySelector(`[data-favorite="${person.id}"] .glyph`);
+      if (updated && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        updated.animate([{ transform: 'scale(.8)' }, { transform: 'scale(1)' }],
+          { duration: 240, easing: 'cubic-bezier(.32,.72,0,1)' });
+      }
+    } catch (error) { notify(error.message); }
     return;
   }
   const row = event.target.closest('[data-id]');
   if (row) {
     const previous = state.selected;
-    if (state.view === 'overview') state.view = 'all';
+    const wasOverview = state.view === 'overview';
+    if (wasOverview) state.view = 'all';
     state.selected = Number(row.dataset.id);
-    render();
+    if (wasOverview) {
+      render();
+    } else {
+      document.querySelectorAll('.contact-row').forEach((item) => {
+        item.classList.toggle('selected', Number(item.dataset.id) === state.selected);
+      });
+      renderDetail();
+    }
     if (previous !== state.selected && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
       $('#detail').animate(
         [{ opacity: 0.75, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }],
