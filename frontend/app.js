@@ -19,6 +19,8 @@ const iconPaths = {
   phone: '<path d="M5 3h4l2 5-3 2a14 14 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A18 18 0 0 1 3 5a2 2 0 0 1 2-2Z"/>',
   tag: '<path d="M3 4h8l10 10-7 7L3 10Z"/><circle cx="7" cy="8" r="1"/>',
   note: '<path d="M5 3h14v18H5zM8 8h8m-8 4h8m-8 4h5"/>',
+  mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 7 9-7"/>',
+  message: '<path d="M21 11.5a8.5 8.5 0 0 1-8.5 8.5H6l-3 2v-5a8.5 8.5 0 1 1 18-5.5Z"/>',
   copy: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M16 4H6a2 2 0 0 0-2 2v10"/>'
 };
 
@@ -30,13 +32,16 @@ document.querySelectorAll('[data-icon]').forEach((element) => {
   element.innerHTML = icon(element.dataset.icon);
 });
 
+const methodLabels = { '电话': 'Phone', '邮箱': 'Email', '社交账号': 'Social', '地址': 'Address', '其他': 'Other' };
+const errorLabels = { '请输入联系人姓名': 'Please enter a contact name.', '请填写完整的联系方式': 'Please complete the contact details.', '分组或标签格式有误': 'Invalid groups or tags.', '联系人信息格式有误': 'Invalid contact information.', '所选分组不存在': 'The selected group no longer exists.', '联系人不存在': 'Contact not found.', '请输入分组名称': 'Please enter a group name.', '分组名称已存在': 'This group already exists.', '头像太大，请选择小于 1 MB 的图片': 'Please select an image smaller than 1 MB.' };
+
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g, (c) => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 
 async function api(url, options = {}) {
   const response = await fetch(url, options);
   if (!response.ok) {
     const data = await response.json().catch(() => ({}));
-    throw new Error(data.error || '操作失败，请稍后重试');
+    throw new Error(errorLabels[data.error] || 'Something went wrong. Please try again.');
   }
   return response.status === 204 ? null : response.json();
 }
@@ -48,7 +53,7 @@ function notify(text) {
   notify.timer = setTimeout(() => { toast.style.display = 'none'; }, 2500);
 }
 function avatar(person, large = false) {
-  const cls = large ? 'avatar hero-avatar' : 'avatar';
+  const cls = `${large ? 'avatar hero-avatar' : 'avatar'} avatar-tone-${person.id % 5}`;
   return person.avatar && /^data:image\/(png|jpeg|webp|gif);base64,/i.test(person.avatar)
     ? `<img class="${cls}" src="${esc(person.avatar)}" alt="">`
     : `<span class="${cls}">${esc(person.name.trim().charAt(0).toUpperCase())}</span>`;
@@ -68,14 +73,15 @@ function render() {
   $('#total').textContent = $('#stat-total').textContent = all.length;
   $('#favorites-count').textContent = $('#stat-favorites').textContent = favorites;
   $('#recent-count').textContent = $('#stat-recent').textContent = recentCount;
-  $('#stat-groups').textContent = state.groups.length;
   document.querySelectorAll('#navigation .nav').forEach((button) => button.classList.toggle('active', button.dataset.view === state.view));
-  $('#groups').innerHTML = state.groups.map((g) => `<button class="nav ${state.view === 'group' && state.group === g.id ? 'active' : ''}" data-group="${g.id}">${icon('folder')}${esc(g.name)}<b>${all.filter((p) => p.groups.some((item) => item.id === g.id)).length}</b></button>`).join('');
   const filter = $('#tag-filter');
   const previous = filter.value;
   const tags = [...new Set(all.flatMap((p) => p.tags))].sort((a, b) => a.localeCompare(b, 'zh'));
-  filter.innerHTML = '<option value="">所有标签</option>' + tags.map((tag) => `<option value="${esc(tag)}">${esc(tag)}</option>`).join('');
+  filter.innerHTML = '<option value="">All tags</option>' + tags.map((tag) => `<option value="${esc(tag)}">${esc(tag)}</option>`).join('');
   filter.value = tags.includes(previous) ? previous : '';
+  $('#stat-tags').textContent = tags.length;
+  $('#tags').innerHTML = tags.map((tag, index) => `<button class="nav tag-nav ${filter.value === tag ? 'active' : ''}" data-tag-index="${index}"><span class="group-dot group-tone-${index % 5}" aria-hidden="true"></span><span class="group-name">${esc(tag)}</span><b>${all.filter((person) => person.tags.includes(tag)).length}</b></button>`).join('');
+  if (!tags.length) $('#tags').innerHTML = '<p class="tag-empty">Add tags when editing a contact</p>';
   let list = all.filter((p) => {
     if (state.view === 'favorites' && !p.favorite) return false;
     if (state.view === 'recent' && !recent(p)) return false;
@@ -86,60 +92,78 @@ function render() {
   });
   const sort = $('#sort').value;
   list.sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, 'zh') : sort === 'recent' ? b.id - a.id : a.id - b.id);
-  $('#list-heading').textContent = state.view === 'group' ? state.groups.find((g) => g.id === state.group)?.name || '分组' : ({all:'所有联系人',favorites:'收藏',recent:'最近添加'}[state.view]);
+  $('#list-heading').textContent = state.view === 'group' ? state.groups.find((g) => g.id === state.group)?.name || 'Groups' : ({all:'All Contacts',favorites:'Favorites',recent:'Recently Added'}[state.view]);
+  if (filter.value) $('#list-heading').textContent = filter.value;
+  $('#list-heading').textContent += ` · ${list.length} ${list.length === 1 ? 'contact' : 'contacts'}`;
   if (!list.some((p) => p.id === state.selected)) state.selected = list[0]?.id ?? null;
-  $('#contact-list').innerHTML = list.length ? list.map((p) => `<div class="contact-row ${p.id === state.selected ? 'selected' : ''}" data-id="${p.id}" tabindex="0" role="button">${avatar(p)}<span class="contact-label"><span class="contact-name">${esc(p.name)}</span>${p.methods[0] ? `<span class="contact-preview">${esc(p.methods[0].value)}</span>` : ''}</span><button class="star" aria-pressed="${p.favorite}" data-favorite="${p.id}" aria-label="${p.favorite ? '取消收藏' : '收藏'}">${icon('star')}</button></div>`).join('') : '<p class="muted">没有找到联系人</p>';
+  $('#contact-list').innerHTML = list.length ? list.map((p) => `<div class="contact-row ${p.id === state.selected ? 'selected' : ''}" data-id="${p.id}" tabindex="0" role="button">${avatar(p)}<span class="contact-label"><span class="contact-name">${esc(p.name)}</span>${p.methods[0] ? `<span class="contact-preview">${esc(p.methods[0].value)}</span>` : ''}</span><button class="star" aria-pressed="${p.favorite}" data-favorite="${p.id}" aria-label="${p.favorite ? 'Remove from favorites' : 'Add to favorites'}">${icon('star')}</button></div>`).join('') : '<p class="muted">No contacts found</p>';
   renderDetail();
 }
 function renderDetail() {
   const person = state.contacts.find((p) => p.id === state.selected);
   if (!person) {
-    $('#detail').innerHTML = '<div class="empty-state"><div><strong>没有可显示的联系人</strong>调整筛选条件或点击“新建联系人”</div></div>';
+    $('#detail').innerHTML = '<div class="empty-state"><div><strong>No contact selected</strong>Adjust your filters or add a contact.</div></div>';
     return;
   }
-  const methods = person.methods.length ? person.methods.map((m, i) => `<div class="method"><span class="method-type">${esc(m.type)}</span><span class="method-value">${esc(m.value)}</span><button class="copy" data-copy="${i}" aria-label="复制${esc(m.type)}">${icon('copy')}</button></div>`).join('') : '<span class="muted">暂无联系方式</span>';
-  const groupChips = person.groups.map((group) =>
-    `<span class="chip group-chip">${icon('folder')}${esc(group.name)}</span>`
-  );
+  const order = ['电话', '邮箱', '社交账号', '地址', '其他'];
+  const sortedMethods = person.methods.map((method, index) => ({ ...method, index }))
+    .sort((a, b) => (order.indexOf(a.type) < 0 ? order.length : order.indexOf(a.type)) - (order.indexOf(b.type) < 0 ? order.length : order.indexOf(b.type)));
+  const methods = sortedMethods.length ? sortedMethods.map((method) => {
+    const phone = method.type === '电话' && /^[+\d\s().-]+$/.test(method.value) ? method.value.replace(/[\s().-]/g, '') : '';
+    const email = method.type === '邮箱' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(method.value) ? method.value : '';
+    const action = phone ? `<a class="method-action" href="tel:${esc(phone)}">Call</a>` : email ? `<a class="method-action" href="mailto:${esc(email)}">Email</a>` : '';
+    return `<div class="method"><span class="method-type">${esc(methodLabels[method.type] || method.type)}</span><span class="method-value">${esc(method.value)}</span>${action}<button class="copy" data-copy="${method.index}" aria-label="Copy ${esc(methodLabels[method.type] || method.type)}" title="Copy">${icon('copy')}</button></div>`;
+  }).join('') : '<span class="muted">No contact information</span>';
+  const validPhone = person.methods.find((method) => method.type === '电话' && /^[+\d\s().-]+$/.test(method.value));
+  const validEmail = person.methods.find((method) => method.type === '邮箱' && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(method.value));
+  const number = validPhone ? validPhone.value.replace(/[\s().-]/g, '') : '';
+  const quickAction = (label, glyph, url) => url
+    ? `<a class="quick-action" href="${esc(url)}">${icon(glyph)}<span>${label}</span></a>`
+    : `<span class="quick-action unavailable" aria-disabled="true">${icon(glyph)}<span>${label}</span></span>`;
   const tagChips = person.tags.map((tag) => `<span class="chip">${esc(tag)}</span>`);
   $('#detail').innerHTML = `
     <div class="detail-hero">
       <div class="identity">
         <div class="hero-portrait">${avatar(person, true)}
-          ${person.favorite ? `<span class="favorite-badge" aria-label="已收藏">${icon('star')}</span>` : ''}
+          ${person.favorite ? `<span class="favorite-badge" aria-label="Favorite">${icon('star')}</span>` : ''}
         </div>
         <div>
           <h1>${esc(person.name)}</h1>
-          <p class="joined">${esc(person.created_at.slice(0, 10))} 加入通讯录</p>
+          <p class="joined">${esc(person.created_at.slice(0, 10))} added</p>
         </div>
       </div>
       <div class="detail-actions">
-        <button class="hero-action" id="edit" type="button" title="编辑联系人">${icon('edit')}<span>编辑</span></button>
-        <button class="hero-action" id="delete" type="button" aria-label="删除联系人" title="删除联系人">${icon('trash')}</button>
+        <button class="hero-action" id="edit" type="button" title="Edit contact">${icon('edit')}<span>Edit</span></button>
+        <button class="hero-action" id="delete" type="button" aria-label="Delete contact" title="Delete contact">${icon('trash')}</button>
       </div>
+    </div>
+    <div class="quick-actions" aria-label="Contact actions">
+      ${quickAction('Call', 'phone', number ? `tel:${number}` : '')}
+      ${quickAction('Email', 'mail', validEmail ? `mailto:${validEmail.value}` : '')}
+      ${quickAction('Message', 'message', number ? `sms:${number}` : '')}
     </div>
     <div class="detail-sheet">
       <section class="detail-card">
         <div class="detail-card-heading">
-          <h3>${icon('phone')}联系方式</h3>
-          <button id="add-detail-method" class="text-button" type="button">${icon('plus')}添加</button>
+          <h3>${icon('phone')}Contact Information</h3>
+          <button id="add-detail-method" class="text-button" type="button">${icon('plus')}Add</button>
         </div>
         ${methods}
       </section>
       <section class="detail-card">
-        <h3>${icon('tag')}分组与标签</h3>
-        <div class="chips">${[...groupChips, ...tagChips].join('') || '<span class="muted">暂无分组和标签</span>'}</div>
+        <h3>${icon('tag')}Tags</h3>
+        <div class="chips">${tagChips.join('') || '<span class="muted">No tags yet</span>'}</div>
       </section>
       <section class="detail-card">
-        <h3>${icon('note')}备注</h3>
-        <div class="contact-notes">${person.notes ? esc(person.notes) : '<span class="muted">暂无备注</span>'}</div>
+        <h3>${icon('note')}Notes</h3>
+        <div class="contact-notes">${person.notes ? esc(person.notes) : '<span class="muted">No notes yet</span>'}</div>
       </section>
     </div>`;
 }
 function editMethod(method = {type:'电话', value:''}) {
   const row = document.createElement('div');
   row.className = 'method-edit';
-  row.innerHTML = `<select aria-label="联系方式类型">${['电话','邮箱','社交账号','地址','其他'].map((type) => `<option ${method.type === type ? 'selected' : ''}>${type}</option>`).join('')}</select><input aria-label="联系方式内容" placeholder="输入联系方式" value="${esc(method.value)}"><button type="button" class="remove-method" aria-label="移除联系方式">✕</button>`;
+  row.innerHTML = `<select aria-label="Contact type">${['电话','邮箱','社交账号','地址','其他'].map((type) => `<option value="${type}" ${method.type === type ? 'selected' : ''}>${methodLabels[type]}</option>`).join('')}</select><input aria-label="Contact detail" placeholder="Enter contact detail" value="${esc(method.value)}"><button type="button" class="remove-method" aria-label="Remove contact detail">✕</button>`;
   row.querySelector('button').onclick = () => row.remove();
   $('#method-list').append(row);
 }
@@ -151,11 +175,10 @@ function openEditor(person = null) {
   form.elements.notes.value = person?.notes ?? '';
   form.elements.tags.value = person?.tags.join(', ') ?? '';
   form.elements.favorite.checked = person?.favorite ?? false;
-  $('#form-title').textContent = person ? '编辑联系人' : '新增联系人';
+  $('#form-title').textContent = person ? 'Edit contact' : 'Add Contact';
   $('#form-error').textContent = '';
   $('#method-list').replaceChildren();
   (person?.methods ?? []).forEach(editMethod);
-  $('#group-options').innerHTML = state.groups.length ? state.groups.map((g) => `<label><input type="checkbox" value="${g.id}" ${person?.groups.some((x) => x.id === g.id) ? 'checked' : ''}> ${esc(g.name)}</label>`).join('') : '<span class="muted">请先在侧栏创建分组</span>';
   dialog.showModal();
   form.elements.name.focus();
 }
@@ -166,7 +189,7 @@ $('#avatar-file').onchange = (event) => {
   const file = event.target.files[0];
   if (!file) return;
   if (file.size > 1024 * 1024 || !['image/png','image/jpeg','image/webp','image/gif'].includes(file.type)) {
-    $('#form-error').textContent = '请选择小于 1 MB 的 PNG、JPEG、WebP 或 GIF 图片';
+    $('#form-error').textContent = 'Choose a PNG, JPEG, WebP, or GIF under 1 MB.';
     event.target.value = '';
     return;
   }
@@ -177,24 +200,42 @@ $('#avatar-file').onchange = (event) => {
 form.onsubmit = async (event) => {
   event.preventDefault();
   const methods = [...document.querySelectorAll('.method-edit')].map((row) => ({type:row.querySelector('select').value, value:row.querySelector('input').value.trim()})).filter((m) => m.value);
-  const data = { name:form.elements.name.value, notes:form.elements.notes.value, favorite:form.elements.favorite.checked, avatar:state.avatar, methods, groups:[...document.querySelectorAll('#group-options input:checked')].map((x) => Number(x.value)), tags:form.elements.tags.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean) };
+  const data = { name:form.elements.name.value, notes:form.elements.notes.value, favorite:form.elements.favorite.checked, avatar:state.avatar, methods, groups:state.contacts.find((person) => person.id === Number(form.dataset.id))?.groups.map((group) => group.id) ?? [], tags:form.elements.tags.value.split(/[,，]/).map((x) => x.trim()).filter(Boolean) };
   try {
     const saved = await api(form.dataset.id ? `/api/contacts/${form.dataset.id}` : '/api/contacts', {method:form.dataset.id ? 'PUT' : 'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(data)});
     state.selected = saved.id;
-    state.view = 'all';
-    $('#search').value = '';
-    $('#tag-filter').value = '';
+    if (!form.dataset.id) {
+      state.view = 'all';
+      $('#search').value = '';
+      $('#tag-filter').value = '';
+    }
     dialog.close();
     await refresh();
-    notify('已保存联系人');
+    notify('Contact saved');
   } catch (error) { $('#form-error').textContent = error.message; }
 };
-$('#navigation').onclick = (event) => { const button = event.target.closest('[data-view]'); if (button) { state.view = button.dataset.view; render(); } };
-$('#groups').onclick = (event) => { const button = event.target.closest('[data-group]'); if (button) { state.view = 'group'; state.group = Number(button.dataset.group); render(); } };
-$('#add-group').onclick = async () => {
-  const name = prompt('请输入分组名称');
-  if (!name?.trim()) return;
-  try { await api('/api/groups', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name:name.trim()})}); await refresh(); notify('分组已创建'); } catch (error) { notify(error.message); }
+$('.dashboard').onclick = (event) => {
+  const button = event.target.closest('[data-overview]');
+  if (!button) return;
+  if (button.dataset.overview === 'tags') {
+    $('#tag-filter').focus();
+    return;
+  }
+  state.view = button.dataset.overview;
+  $('#search').value = '';
+  $('#tag-filter').value = '';
+  render();
+};
+$('#navigation').onclick = (event) => { const button = event.target.closest('[data-view]'); if (button) { state.view = button.dataset.view; $('#tag-filter').value = ''; render(); } };
+$('#tags').onclick = (event) => {
+  const button = event.target.closest('[data-tag-index]');
+  if (!button) return;
+  const filter = $('#tag-filter');
+  const option = filter.options[Number(button.dataset.tagIndex) + 1];
+  if (!option) return;
+  state.view = 'all';
+  filter.value = filter.value === option.value ? '' : option.value;
+  render();
 };
 $('#contact-list').onclick = async (event) => {
   const favorite = event.target.closest('[data-favorite]');
@@ -216,12 +257,12 @@ $('#detail').onclick = async (event) => {
     editMethod();
     $('#method-list .method-edit:last-child input').focus();
   }
-  if (event.target.closest('#delete') && confirm(`确定删除 ${person.name} 吗？`)) {
-    try { await api(`/api/contacts/${person.id}`, {method:'DELETE'}); state.selected = null; await refresh(); notify('联系人已删除'); } catch (error) { notify(error.message); }
+  if (event.target.closest('#delete') && confirm(`Delete ${person.name}?`)) {
+    try { await api(`/api/contacts/${person.id}`, {method:'DELETE'}); state.selected = null; await refresh(); notify('Contact deleted'); } catch (error) { notify(error.message); }
   }
   const copy = event.target.closest('[data-copy]');
   if (copy) {
-    try { await navigator.clipboard.writeText(person.methods[Number(copy.dataset.copy)].value); notify('已复制'); } catch { notify('复制失败，请手动选择内容'); }
+    try { await navigator.clipboard.writeText(person.methods[Number(copy.dataset.copy)].value); notify('Copied'); } catch { notify('Copy failed. Please copy the text manually.'); }
   }
 };
 $('#search').oninput = render;
