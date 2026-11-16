@@ -19,7 +19,7 @@
 
 ## 技术方案
 
-使用 HTML、CSS 和 JavaScript 构建单页面应用，联系人保存在浏览器 localStorage 中，计划使用 SheetJS 处理 Excel。项目尚在准备阶段，运行方式将在代码完成后补充。
+前端使用 HTML、CSS 和原生 JavaScript，后端使用 Python 3 + Flask 提供页面和 API。联系人写入 SQLite，Excel 导入导出由后端使用 openpyxl 处理。前后端分别放在 `frontend/` 和 `backend/`，共用本仓库和一个 Flask 服务。运行步骤随工程搭建补充。
 
 ## 项目成员
 
