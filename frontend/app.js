@@ -62,6 +62,39 @@ function recent(person) {
   const time = new Date(person.created_at.replace(' ', 'T') + 'Z').getTime();
   return Date.now() - time < 7 * 86400000;
 }
+function syncMenu(select, menu) {
+  const value = menu.querySelector('.menu-value');
+  value.textContent = select.selectedOptions[0]?.textContent || '';
+  const options = menu.querySelector('.menu-options');
+  options.replaceChildren();
+  for (const option of select.options) {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = option.textContent;
+    button.setAttribute('aria-label', option.textContent);
+    button.className = option.selected ? 'menu-option selected-option' : 'menu-option';
+    button.setAttribute('aria-pressed', String(option.selected));
+    button.onclick = () => {
+      select.value = option.value;
+      menu.open = false;
+      select.dispatchEvent(new Event('change'));
+      menu.querySelector('summary').focus();
+    };
+    options.append(button);
+  }
+}
+
+document.addEventListener('click', (event) => {
+  document.querySelectorAll('.filter-menu[open]').forEach((menu) => {
+    if (!menu.contains(event.target)) menu.open = false;
+  });
+});
+document.addEventListener('keydown', (event) => {
+  if (event.key !== 'Escape') return;
+  const menu = document.querySelector('.filter-menu[open]');
+  if (menu) { menu.open = false; menu.querySelector('summary').focus(); }
+});
+
 async function refresh() {
   [state.contacts, state.groups] = await Promise.all([api('/api/contacts'), api('/api/groups')]);
   render();
@@ -79,6 +112,8 @@ function render() {
   const tags = [...new Set(all.flatMap((p) => p.tags))].sort((a, b) => a.localeCompare(b, 'zh'));
   filter.innerHTML = '<option value="">All tags</option>' + tags.map((tag) => `<option value="${esc(tag)}">${esc(tag)}</option>`).join('');
   filter.value = tags.includes(previous) ? previous : '';
+  syncMenu($('#sort'), $('#sort-menu'));
+  syncMenu(filter, $('#tag-menu'));
   $('#stat-tags').textContent = tags.length;
   $('#tags').innerHTML = tags.map((tag, index) => `<button class="nav tag-nav ${filter.value === tag ? 'active' : ''}" data-tag-index="${index}"><span class="group-dot group-tone-${index % 5}" aria-hidden="true"></span><span class="group-name">${esc(tag)}</span><b>${all.filter((person) => person.tags.includes(tag)).length}</b></button>`).join('');
   if (!tags.length) $('#tags').innerHTML = '<p class="tag-empty">Add tags when editing a contact</p>';
@@ -92,9 +127,12 @@ function render() {
   });
   const sort = $('#sort').value;
   list.sort((a, b) => sort === 'name' ? a.name.localeCompare(b.name, 'zh') : sort === 'recent' ? b.id - a.id : a.id - b.id);
-  $('#list-heading').textContent = state.view === 'group' ? state.groups.find((g) => g.id === state.group)?.name || 'Groups' : ({all:'All Contacts',favorites:'Favorites',recent:'Recently Added'}[state.view]);
-  if (filter.value) $('#list-heading').textContent = filter.value;
-  $('#list-heading').textContent += ` · ${list.length} ${list.length === 1 ? 'contact' : 'contacts'}`;
+  $('#list-title').textContent = filter.value || ({all:'All Contacts',favorites:'Favorites',recent:'Recently Added',overview:'All Contacts'}[state.view]);
+  $('#list-heading').textContent = `${list.length} ${list.length === 1 ? 'contact' : 'contacts'}`;
+  const isOverview = state.view === 'overview';
+  $('#overview-page').hidden = !isOverview;
+  $('#detail').hidden = isOverview;
+  $('#overview-recent').innerHTML = all.filter(recent).sort((a, b) => b.id - a.id).slice(0, 5).map((person) => `<button type="button" class="overview-contact" data-contact="${person.id}">${avatar(person)}<span>${esc(person.name)}</span><span class="overview-date">${esc(person.created_at.slice(0, 10))}</span></button>`).join('') || '<p class="muted">No recently added contacts.</p>';
   if (!list.some((p) => p.id === state.selected)) state.selected = list[0]?.id ?? null;
   $('#contact-list').innerHTML = list.length ? list.map((p) => `<div class="contact-row ${p.id === state.selected ? 'selected' : ''}" data-id="${p.id}" tabindex="0" role="button">${avatar(p)}<span class="contact-label"><span class="contact-name">${esc(p.name)}</span>${p.methods[0] ? `<span class="contact-preview">${esc(p.methods[0].value)}</span>` : ''}</span><button class="star" aria-pressed="${p.favorite}" data-favorite="${p.id}" aria-label="${p.favorite ? 'Remove from favorites' : 'Add to favorites'}">${icon('star')}</button></div>`).join('') : '<p class="muted">No contacts found</p>';
   renderDetail();
@@ -214,14 +252,11 @@ form.onsubmit = async (event) => {
     notify('Contact saved');
   } catch (error) { $('#form-error').textContent = error.message; }
 };
-$('.dashboard').onclick = (event) => {
-  const button = event.target.closest('[data-overview]');
+$('#overview-recent').onclick = (event) => {
+  const button = event.target.closest('[data-contact]');
   if (!button) return;
-  if (button.dataset.overview === 'tags') {
-    $('#tag-filter').focus();
-    return;
-  }
-  state.view = button.dataset.overview;
+  state.view = 'all';
+  state.selected = Number(button.dataset.contact);
   $('#search').value = '';
   $('#tag-filter').value = '';
   render();
@@ -245,7 +280,18 @@ $('#contact-list').onclick = async (event) => {
     return;
   }
   const row = event.target.closest('[data-id]');
-  if (row) { state.selected = Number(row.dataset.id); render(); }
+  if (row) {
+    const previous = state.selected;
+    if (state.view === 'overview') state.view = 'all';
+    state.selected = Number(row.dataset.id);
+    render();
+    if (previous !== state.selected && !window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      $('#detail').animate(
+        [{ opacity: 0.75, transform: 'translateY(3px)' }, { opacity: 1, transform: 'translateY(0)' }],
+        { duration: 180, easing: 'cubic-bezier(.25, 1, .5, 1)' }
+      );
+    }
+  }
 };
 $('#contact-list').onkeydown = (event) => { if ((event.key === 'Enter' || event.key === ' ') && event.target.matches('[data-id]')) { event.preventDefault(); event.target.click(); } };
 $('#detail').onclick = async (event) => {

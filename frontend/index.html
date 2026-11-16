@@ -1,6 +1,49 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Contacts</title><link rel="stylesheet" href="/assets/style.css"><script src="/assets/app.js" defer></script></head>
-<body><div class="app">
-<aside class="sidebar"><div class="brand"><span class="brand-icon" data-icon="user" aria-hidden="true"></span><strong>Contacts</strong></div><nav id="navigation"><button data-view="all" class="nav active"><span data-icon="users" aria-hidden="true"></span>All Contacts <b id="total">0</b></button><button data-view="favorites" class="nav"><span data-icon="star" aria-hidden="true"></span>Favorites <b id="favorites-count">0</b></button><button data-view="recent" class="nav"><span data-icon="clock" aria-hidden="true"></span>Recently Added <b id="recent-count">0</b></button></nav><div class="section-label">Tags</div><div id="tags"></div><div class="dashboard"><h3><span data-icon="overview" aria-hidden="true"></span>Overview</h3><button type="button" data-overview="all">Contacts <b id="stat-total">0</b></button><button type="button" data-overview="favorites">Favorites <b id="stat-favorites">0</b></button><button type="button" data-overview="tags">Tags <b id="stat-tags">0</b></button><button type="button" data-overview="recent">Recently Added <b id="stat-recent">0</b></button></div></aside>
-<section class="workspace"><header class="topbar"><div class="topbar-actions"><label class="search"><span data-icon="search" aria-hidden="true"></span><input id="search" type="search" placeholder="Search contacts..." aria-label="Search contacts"></label><button class="new-contact" id="new-contact" type="button"><span data-icon="plus" aria-hidden="true"></span> Add Contact</button><button class="icon-button" id="theme" title="Toggle dark mode" aria-label="Dark mode" aria-pressed="false"></button></div></header><div class="content"><section class="list-panel"><div class="search-row"><select id="sort" aria-label="Sort"><option value="name">Name</option><option value="recent">Newest first</option><option value="oldest">Oldest first</option></select></div><div class="filter-row"><span id="list-heading">All Contacts</span><select id="tag-filter" aria-label="Filter by tag"><option value="">All tags</option></select></div><div id="contact-list" class="contact-list"></div></section><section class="detail-panel" id="detail"></section></div></section></div>
-<dialog id="editor" aria-labelledby="form-title"><form id="contact-form"><div class="dialog-head"><h2 id="form-title">Add Contact</h2><button type="button" class="close" id="close-editor" aria-label="Close">×</button></div><div class="form-grid"><label>Name <input name="name" required maxlength="120" placeholder="Enter a name"></label><label>Photo <input id="avatar-file" type="file" accept="image/*"><small>Optional, maximum 1 MB</small></label><label class="wide">Notes <textarea name="notes" rows="3" placeholder="Add a note"></textarea></label><div class="wide"><div class="field-head"><label>Contact information</label><button type="button" class="text-button" id="add-method">＋ Add</button></div><div id="method-list"></div></div><label class="wide">Tags <input name="tags" placeholder="Separate tags with commas"></label><label class="wide checkbox"><input type="checkbox" name="favorite"> Favorite contact</label></div><p id="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel">Cancel</button><button class="primary" type="submit">Save Contact</button></div></form></dialog><div id="toast" role="status" aria-live="polite"></div></body></html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Contacts</title>
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-icon" data-icon="user" aria-hidden="true"></span><strong>Contacts</strong></div>
+      <nav id="navigation" aria-label="Contact views">
+        <button data-view="all" class="nav active"><span data-icon="users" aria-hidden="true"></span>All Contacts <b id="total">0</b></button>
+        <button data-view="favorites" class="nav"><span data-icon="star" aria-hidden="true"></span>Favorites <b id="favorites-count">0</b></button>
+        <button data-view="recent" class="nav"><span data-icon="clock" aria-hidden="true"></span>Recently Added <b id="recent-count">0</b></button>
+        <button data-view="overview" class="nav"><span data-icon="overview" aria-hidden="true"></span>Overview</button>
+      </nav>
+      <div class="section-label">Tags</div>
+      <div id="tags"></div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar">
+        <label class="search"><span data-icon="search" aria-hidden="true"></span><input id="search" type="search" placeholder="Search contacts" aria-label="Search contacts"></label>
+        <div class="topbar-actions">
+          <button class="new-contact" id="new-contact" type="button"><span data-icon="plus" aria-hidden="true"></span> Add Contact</button>
+          <button class="icon-button" id="theme" title="Toggle dark mode" aria-label="Dark mode" aria-pressed="false"></button>
+        </div>
+      </header>
+      <div class="content">
+        <section class="list-panel" aria-label="Contacts list">
+          <div class="list-header"><div><h1 id="list-title">All Contacts</h1><span id="list-heading" class="list-count"></span></div><div class="menu-wrap"><select id="sort" class="native-filter" aria-label="Sort contacts"><option value="name">Name</option><option value="recent">Newest first</option><option value="oldest">Oldest first</option></select><details class="filter-menu" id="sort-menu"><summary aria-label="Sort contacts"><span class="menu-value">Name</span><span aria-hidden="true">⌄</span></summary><div class="menu-options"></div></details></div></div>
+          <div class="filter-row"><div class="menu-wrap"><select id="tag-filter" class="native-filter" aria-label="Filter by tag"><option value="">All tags</option></select><details class="filter-menu" id="tag-menu"><summary aria-label="Filter by tag"><span class="menu-value">All tags</span><span aria-hidden="true">⌄</span></summary><div class="menu-options"></div></details></div></div>
+          <div id="contact-list" class="contact-list"></div>
+        </section>
+        <section class="detail-panel" id="detail" aria-label="Contact details"></section>
+        <section id="overview-page" class="overview-page" aria-labelledby="overview-title" hidden>
+          <h1 id="overview-title">Overview</h1><p class="overview-subtitle">Your contacts at a glance.</p>
+          <dl class="overview-stats"><div><dt>Contacts</dt><dd id="stat-total">0</dd></div><div><dt>Favorites</dt><dd id="stat-favorites">0</dd></div><div><dt>Tags</dt><dd id="stat-tags">0</dd></div><div><dt>Recently Added</dt><dd id="stat-recent">0</dd></div></dl>
+          <h2>Recently Added</h2><div id="overview-recent" class="overview-recent"></div>
+        </section>
+      </div>
+    </main>
+  </div>
+  <dialog id="editor" aria-labelledby="form-title"><form id="contact-form"><div class="dialog-head"><h2 id="form-title">Add Contact</h2><button type="button" class="close" id="close-editor" aria-label="Close">×</button></div><div class="form-grid"><label>Name <input name="name" required maxlength="120" placeholder="Enter a name"></label><label>Photo <input id="avatar-file" type="file" accept="image/*"><small>Optional, maximum 1 MB</small></label><label class="wide">Notes <textarea name="notes" rows="3" placeholder="Add a note"></textarea></label><div class="wide"><div class="field-head"><label>Contact information</label><button type="button" class="text-button" id="add-method">＋ Add</button></div><div id="method-list"></div></div><label class="wide">Tags <input name="tags" placeholder="Separate tags with commas"></label><label class="wide checkbox"><input type="checkbox" name="favorite"> Favorite contact</label></div><p id="form-error" role="alert"></p><div class="dialog-actions"><button type="button" class="secondary" id="cancel">Cancel</button><button class="primary" type="submit">Save Contact</button></div></form></dialog>
+  <div id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
