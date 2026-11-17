@@ -13,7 +13,7 @@ Contacts is a web address book with a three-column layout: navigation and tags, 
 
 **Deployment address: [https://eason.pythonanywhere.com/](https://eason.pythonanywhere.com/)**
 
-The hosted version has not yet been updated with the latest Excel import and export features. To try them, run the project locally.
+The online demo supports Excel import and export. See the instructions below for running the application locally and using workbooks.
 
 ## Features
 
