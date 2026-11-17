@@ -7,7 +7,13 @@
 
 # Contacts
 
-Contacts is a web address book with a three-column layout: navigation and tags, a searchable contact list, and a profile panel. [Open the hosted demo on PythonAnywhere](https://eason.pythonanywhere.com/). To try the latest features, including Excel import and export, run the project locally.
+Contacts is a web address book with a three-column layout: navigation and tags, a searchable contact list, and a profile panel.
+
+## Online demo
+
+**Deployment address: [https://eason.pythonanywhere.com/](https://eason.pythonanywhere.com/)**
+
+The hosted version has not yet been updated with the latest Excel import and export features. To try them, run the project locally.
 
 ## Features
 
