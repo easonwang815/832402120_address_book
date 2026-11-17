@@ -15,6 +15,9 @@ Contacts is a web address book with a three-column layout: navigation and tags, 
 
 The online demo supports Excel import and export. See the instructions below for running the application locally and using workbooks.
 
+- [Release v1.0](https://github.com/easonwang815/832402120_address_book/releases/tag/v1.0)
+- [Pull request #1](https://github.com/easonwang815/832402120_address_book/pull/1)
+
 ## Features
 
 - Add, edit, and delete contacts. Save multiple phone numbers, email addresses, social accounts, and addresses for each person.

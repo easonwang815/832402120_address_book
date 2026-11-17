@@ -31,8 +31,8 @@ This project is a web-based address book for managing contact information. Users
 - **GitHub repository:** [832402120_address_book](https://github.com/easonwang815/832402120_address_book)
 - **Online application:** [Contacts on PythonAnywhere](https://eason.pythonanywhere.com/)
 - **Code standards:** [CODE_STANDARDS.md](https://github.com/easonwang815/832402120_address_book/blob/main/CODE_STANDARDS.md)
-- **Release:** [Add the GitHub Release link after it is created]
-- **Pull request:** [Add the pull request link after it is created]
+- **Release:** [v1.0](https://github.com/easonwang815/832402120_address_book/releases/tag/v1.0)
+- **Pull request:** [Update online demo Excel availability](https://github.com/easonwang815/832402120_address_book/pull/1)
 
 > [Before publishing: confirm that the online application and repository contain the final version described below.]
 
@@ -176,8 +176,8 @@ When a possible duplicate is found while adding a contact, the application offer
 
 | Member | GitHub account | Number of commits |
 | --- | --- | ---: |
-| Wang Yizhen | [Account] | [Actual count] |
-| Xu Zidong | [Account] | [Actual count] |
+| Wang Yizhen | easonwang815 | [Actual count] |
+| Xu Zidong | Xzd6128127-coder | [Actual count] |
 
 > [Check the repository history and fill in the actual number of commits by each contributor.]
 
