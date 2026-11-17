@@ -459,6 +459,42 @@ $('#detail').onclick = async (event) => {
 $('#search').oninput = render;
 $('#sort').onchange = render;
 $('#tag-filter').onchange = render;
+$('#import-excel').onclick = () => $('#excel-file').click();
+$('#excel-file').onchange = async (event) => {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+  if (!confirm('Import contacts from this workbook? Imported contacts are added to the existing list and may create duplicates.')) return;
+  const button = $('#import-excel');
+  button.disabled = true;
+  try {
+    const data = new FormData();
+    data.append('file', file);
+    const result = await api('/api/contacts/import', {method: 'POST', body: data});
+    await refresh();
+    notify(`Imported ${result.imported} contact(s)${result.skipped ? `; skipped ${result.skipped} without a name` : ''}.`);
+  } catch (error) { notify(error.message); }
+  finally { button.disabled = false; }
+};
+$('#export-excel').onclick = async () => {
+  const button = $('#export-excel');
+  button.disabled = true;
+  try {
+    const response = await fetch('/api/contacts/export');
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data.error || 'Export failed. Please try again.');
+    }
+    const url = URL.createObjectURL(await response.blob());
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = 'contacts.xlsx';
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    notify('Excel file downloaded.');
+  } catch (error) { notify(error.message); }
+  finally { button.disabled = false; }
+};
 function setTheme(dark) { document.body.classList.toggle('dark', dark); $('#theme').innerHTML = icon(dark ? 'moon' : 'sun'); $('#theme').setAttribute('aria-pressed', dark); localStorage.setItem('theme', dark ? 'dark' : 'light'); }
 setTheme(localStorage.getItem('theme') === 'dark');
 $('#theme').onclick = () => setTheme(!document.body.classList.contains('dark'));

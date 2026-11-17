@@ -25,6 +25,9 @@
       <header class="topbar">
         <label class="search"><span data-icon="search" aria-hidden="true"></span><input id="search" type="search" placeholder="Search contacts" aria-label="Search contacts"></label>
         <div class="topbar-actions">
+          <button class="secondary excel-button" id="import-excel" type="button">Import Excel</button>
+          <button class="secondary excel-button" id="export-excel" type="button">Export Excel</button>
+          <input id="excel-file" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
           <button class="new-contact" id="new-contact" type="button"><span data-icon="plus" aria-hidden="true"></span> Add Contact</button>
           <button class="icon-button" id="theme" title="Toggle dark mode" aria-label="Dark mode" aria-pressed="false"></button>
         </div>

@@ -1,9 +1,11 @@
 from pathlib import Path
 import sqlite3
 from datetime import date
+from contextlib import nullcontext
 import re
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Flask, jsonify, request, send_file, send_from_directory
 from db import close_db, get_db, init_db
+from excel import export_contacts, import_contacts, MAX_UPLOAD
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -67,13 +69,13 @@ def create_app(config=None):
                 raise ValueError('所选分组不存在')
         return data['name'].strip(), methods, groups, tags
 
-    def save(data, cid=None):
+    def save(data, cid=None, *, commit=True):
         if cid is not None and isinstance(data, dict) and 'birthday' not in data:
             existing = get_db().execute('SELECT birthday FROM contacts WHERE id=?', (cid,)).fetchone()
             data = {**data, 'birthday': existing['birthday'] if existing else ''}
         name, methods, groups, tags = validate(data)
         db = get_db()
-        with db:
+        with db if commit else nullcontext():
             if cid is None:
                 cid = db.execute('INSERT INTO contacts (name, favorite, avatar, notes, birthday, created_at) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)', (name, data.get('favorite', False), data.get('avatar', ''), data.get('notes', ''), data.get('birthday', ''))).lastrowid
             else:
@@ -98,6 +100,45 @@ def create_app(config=None):
     @app.get('/api/contacts')
     def list_contacts():
         return jsonify([contact(row) for row in get_db().execute('SELECT * FROM contacts ORDER BY id DESC').fetchall()])
+
+    @app.get('/api/contacts/export')
+    def export_excel():
+        people = [contact(row) for row in get_db().execute('SELECT * FROM contacts ORDER BY id').fetchall()]
+        try:
+            return send_file(export_contacts(people), mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', as_attachment=True, download_name='contacts.xlsx')
+        except ValueError as error:
+            return jsonify(error=str(error)), 400
+
+    @app.post('/api/contacts/import')
+    def import_excel():
+        upload = request.files.get('file')
+        if not upload or not upload.filename.lower().endswith('.xlsx'):
+            return jsonify(error='Please select an .xlsx file.'), 400
+        try:
+            people, skipped = import_contacts(upload.stream.read(MAX_UPLOAD + 1))
+            db = get_db()
+            # All rows and associated tags/groups are committed together.
+            with db:
+                for number, person in enumerate(people, 1):
+                    group_names = person.pop('group_names')
+                    created_at = person.pop('created_at')
+                    group_ids = []
+                    for name in group_names:
+                        db.execute('INSERT OR IGNORE INTO groups (name) VALUES (?)', (name.strip(),))
+                        group_ids.append(db.execute('SELECT id FROM groups WHERE name=? COLLATE NOCASE', (name.strip(),)).fetchone()['id'])
+                    person['groups'] = group_ids
+                    try:
+                        saved = save(person, commit=False)
+                    except ValueError as error:
+                        raise ValueError(f'Contact {number}: {error}') from error
+                    if created_at:
+                        db.execute('UPDATE contacts SET created_at=? WHERE id=?', (created_at, saved['id']))
+            return jsonify(imported=len(people), skipped=skipped)
+        except (ValueError, sqlite3.IntegrityError) as error:
+            return jsonify(error=str(error)), 400
+        except Exception:
+            app.logger.exception('Excel import failed')
+            return jsonify(error='Could not read the workbook. Please check its format.'), 400
 
     @app.post('/api/contacts')
     def create_contact():
